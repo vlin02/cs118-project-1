@@ -132,6 +132,16 @@ void parse_args(int argc, char *argv[], struct server_app *app)
     }
 }
 
+int endsWith(const char *str, const char *sfx)
+{
+    size_t len = strlen(str);
+    size_t sfx_len = strlen(sfx);
+
+    if (len < sfx_len)
+        return 0;
+    return strcmp(str + len - sfx_len, sfx) == 0;
+}
+
 void handle_request(struct server_app *app, int client_socket)
 {
     char buffer[BUFFER_SIZE];
@@ -191,18 +201,16 @@ void handle_request(struct server_app *app, int client_socket)
     // if (need_proxy(...)) {
     //    proxy_remote_file(app, client_socket, file_name);
     // } else {
-    serve_local_file(client_socket, file_name);
+
+    if(endsWith(*ptr, '.ts') == 1)
+    {
+        proxy_remote_file(app, client_socket, request);
+    }
+    else
+    {
+        serve_local_file(client_socket, file_name);
+    }
     //}
-}
-
-int endsWith(const char *str, const char *sfx)
-{
-    size_t len = strlen(str);
-    size_t sfx_len = strlen(sfx);
-
-    if (len < sfx_len)
-        return 0;
-    return strcmp(str + len - sfx_len, sfx) == 0;
 }
 
 void serve_local_file(int client_socket, const char *path)
@@ -276,6 +284,36 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
     // * When connection to the remote server fail, properly generate
     // HTTP 502 "Bad Gateway" response
 
-    char response[] = "HTTP/1.0 501 Not Implemented\r\n\r\n";
-    send(client_socket, response, strlen(response), 0);
+    int remote_socket, status;
+    struct sockaddr_in remote_server_addr;
+    char buffer[BUFFER_SIZE];
+    ssize_t bytes_read;
+
+    remote_socket = socket(AF_INET, SOCK_STREAM, 0);
+
+    // defining fields for remote server
+    remote_server_addr.sin_family = AF_INET;
+    remote_server_addr.sin_addr.s_addr = htons(app->remote_host);
+    remote_server_addr.sin_port = htons(app->remote_port);
+
+    //checking if socket connection was successful
+    if ((status = connect(remote_socket, (struct sockaddr*)&remote_server_addr, sizeof(remote_server_addr))) < 0) {
+        printf("\nConnection Failed \n");
+        return;
+    }
+
+    send(remote_socket, request, strlen(request), 0);
+
+    bytes_read = recv(remote_socket, buffer, sizeof(buffer) - 1, 0);
+    if (bytes_read <= 0)
+    {
+        char response[] = "HTTP/1.0 501 Not Implemented\r\n\r\n";
+        close(remote_socket);
+        send(client_socket, response, strlen(response), 0);
+    }
+    else
+    {
+        close(remote_socket);
+        send(client_socket, bytes_read, strlen(bytes_read), 0);
+    }
 }
