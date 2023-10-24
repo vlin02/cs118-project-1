@@ -202,7 +202,7 @@ void handle_request(struct server_app *app, int client_socket)
     //    proxy_remote_file(app, client_socket, file_name);
     // } else {
 
-    if(endsWith(*ptr, '.ts') == 1)
+    if(endsWith(file_name, ".ts") == 1)
     {
         proxy_remote_file(app, client_socket, request);
     }
@@ -289,31 +289,71 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
     char buffer[BUFFER_SIZE];
     ssize_t bytes_read;
 
-    remote_socket = socket(AF_INET, SOCK_STREAM, 0);
+    //remote_socket = socket(AF_INET, SOCK_STREAM, 0);
+
+    if ((remote_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("socket failed");
+        exit(EXIT_FAILURE);
+}
 
     // defining fields for remote server
     remote_server_addr.sin_family = AF_INET;
-    remote_server_addr.sin_addr.s_addr = htons(app->remote_host);
+    remote_server_addr.sin_addr.s_addr = inet_addr(app->remote_host);
     remote_server_addr.sin_port = htons(app->remote_port);
 
-    //checking if socket connection was successful
-    if ((status = connect(remote_socket, (struct sockaddr*)&remote_server_addr, sizeof(remote_server_addr))) < 0) {
-        printf("\nConnection Failed \n");
+    if (inet_pton(AF_INET, app->remote_host, &remote_server_addr.sin_addr) <= 0)
+    {
+        printf(
+            "\nInvalid address/ Address not supported \n");
         return;
     }
 
-    send(remote_socket, request, strlen(request), 0);
+    // connecting socket to remote server
+    if ((status = connect(remote_socket, (struct sockaddr*)&remote_server_addr, sizeof(remote_server_addr))) < 0)
+    {
+        printf("\nConnection Failed \n");
+        perror("Error message: ");
+        return;
+    }
+
+    // sending message to remote server
+    if((send(remote_socket, request, strlen(request), 0)) < 0)
+    {
+        perror("Error message: ");
+        return;
+    };
 
     bytes_read = recv(remote_socket, buffer, sizeof(buffer) - 1, 0);
+
+    if(bytes_read < 0)
+    {
+        perror("Error message:");
+        return;
+    }
+
+    buffer[bytes_read] = '\0';
+    // copy buffer to a new string
+    char *resp = malloc(strlen(buffer) + 1);
+    strcpy(resp, buffer);
+
     if (bytes_read <= 0)
     {
         char response[] = "HTTP/1.0 501 Not Implemented\r\n\r\n";
         close(remote_socket);
-        send(client_socket, response, strlen(response), 0);
+        if((send(client_socket, response, strlen(response), 0)) < 0)
+        {
+            perror("Error message: ");
+            return;
+        };
     }
     else
     {
         close(remote_socket);
-        send(client_socket, bytes_read, strlen(bytes_read), 0);
+        if((send(client_socket, resp, strlen(resp), 0)) < 0)
+        {
+            perror("Error message: ");
+            return;
+        };
+
     }
 }
