@@ -56,6 +56,8 @@ int main(int argc, char *argv[])
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
+    
+    printf("reached 2");
 
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -90,6 +92,7 @@ int main(int argc, char *argv[])
         }
 
         printf("Accepted connection from %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+        printf("handle request");
         handle_request(&app, client_socket);
         close(client_socket);
     }
@@ -134,6 +137,7 @@ void parse_args(int argc, char *argv[], struct server_app *app)
 
 int endsWith(const char *str, const char *sfx)
 {
+    printf("comparing");
     size_t len = strlen(str);
     size_t sfx_len = strlen(sfx);
 
@@ -152,6 +156,8 @@ void handle_request(struct server_app *app, int client_socket)
     // assumes that the request header is small enough and can be read
     // once as a whole.
     // However, the current version suffices for our testing.
+
+    printf("in handle request");
     bytes_read = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
     if (bytes_read <= 0)
     {
@@ -162,6 +168,8 @@ void handle_request(struct server_app *app, int client_socket)
     // copy buffer to a new string
     char *request = malloc(strlen(buffer) + 1);
     strcpy(request, buffer);
+    
+    printf("reading bytes");
 
     // TODO: Parse the header and extract essential fields, e.g. file name
     // Hint: if the requested path is "/" (root), default to index.html
@@ -196,14 +204,19 @@ void handle_request(struct server_app *app, int client_socket)
         file_name = "index.html";
     }
 
+    printf("parsed header");
+
     // TODO: Implement proxy and call the function under condition
     // specified in the spec
     // if (need_proxy(...)) {
     //    proxy_remote_file(app, client_socket, file_name);
     // } else {
 
+    printf("reached1");
+
     if(endsWith(file_name, ".ts") == 1)
     {
+        printf("reached");
         proxy_remote_file(app, client_socket, request);
     }
     else
@@ -289,6 +302,8 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
     char buffer[BUFFER_SIZE];
     ssize_t bytes_read;
 
+    printf("remote");
+
     //remote_socket = socket(AF_INET, SOCK_STREAM, 0);
 
     if ((remote_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -322,9 +337,9 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
         perror("Error message: ");
         return;
     };
-
+    printf("started to read bytes");
     bytes_read = recv(remote_socket, buffer, sizeof(buffer) - 1, 0);
-
+    printf("bytes read: %d", bytes_read);
     if(bytes_read < 0)
     {
         perror("Error message:");
