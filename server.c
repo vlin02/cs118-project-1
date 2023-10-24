@@ -356,4 +356,6 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
         };
 
     }
+
+    close(remote_socket);
 }
