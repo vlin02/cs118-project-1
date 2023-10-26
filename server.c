@@ -132,6 +132,16 @@ void parse_args(int argc, char *argv[], struct server_app *app)
     }
 }
 
+int endsWith(const char *str, const char *sfx)
+{
+    size_t len = strlen(str);
+    size_t sfx_len = strlen(sfx);
+
+    if (len < sfx_len)
+        return 0;
+    return strcmp(str + len - sfx_len, sfx) == 0;
+}
+
 void handle_request(struct server_app *app, int client_socket)
 {
     char buffer[BUFFER_SIZE];
@@ -142,19 +152,24 @@ void handle_request(struct server_app *app, int client_socket)
     // assumes that the request header is small enough and can be read
     // once as a whole.
     // However, the current version suffices for our testing.
+    printf("1");
     bytes_read = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
+    printf("2");
     if (bytes_read <= 0)
     {
         return; // Connection closed or error
     }
+    printf("3");
 
     buffer[bytes_read] = '\0';
     // copy buffer to a new string
     char *request = malloc(strlen(buffer) + 1);
     strcpy(request, buffer);
+    // printf("%s", request);
 
     // TODO: Parse the header and extract essential fields, e.g. file name
     // Hint: if the requested path is "/" (root), default to index.html
+    printf("%s", buffer);
     char *file_name = strtok(request, " ");
     file_name = strtok(NULL, " ");
     char *ptr = file_name;
@@ -191,18 +206,19 @@ void handle_request(struct server_app *app, int client_socket)
     // if (need_proxy(...)) {
     //    proxy_remote_file(app, client_socket, file_name);
     // } else {
-    serve_local_file(client_socket, file_name);
+
+    if(endsWith(file_name, ".ts") == 1)
+    {
+        printf("rahh");
+        char *request2 = malloc(strlen(buffer) + 1);
+        strcpy(request2, buffer);
+        proxy_remote_file(app, client_socket, request2);
+    }
+    else
+    {
+        serve_local_file(client_socket, file_name);
+    }
     //}
-}
-
-int endsWith(const char *str, const char *sfx)
-{
-    size_t len = strlen(str);
-    size_t sfx_len = strlen(sfx);
-
-    if (len < sfx_len)
-        return 0;
-    return strcmp(str + len - sfx_len, sfx) == 0;
 }
 
 void serve_local_file(int client_socket, const char *path)
@@ -273,9 +289,73 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
     // * Forward the original request to the remote server
     // * Pass the response from remote server back
     // Bonus:
-    // * When connection to the remote server fail, properly generate
-    // HTTP 502 "Bad Gateway" response
+    // * When connection to the remote server fail, pr
+    
+    int remote_socket, status;
+    struct sockaddr_in remote_server_addr;
+    char buffer[BUFFER_SIZE];
+    ssize_t bytes_read;
 
-    char response[] = "HTTP/1.0 501 Not Implemented\r\n\r\n";
-    send(client_socket, response, strlen(response), 0);
+    printf("creating socket\n");
+    if ((remote_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // defining fields for remote server
+    printf("defining fields\n");
+    remote_server_addr.sin_family = AF_INET;
+    remote_server_addr.sin_addr.s_addr = inet_addr(app->remote_host);
+    remote_server_addr.sin_port = htons(app->remote_port);
+
+    printf("checking valid address\n");
+    if (inet_pton(AF_INET, app->remote_host, &remote_server_addr.sin_addr) <= 0)
+    {
+        printf(
+            "\nInvalid address/ Address not supported \n");
+        return;
+    }
+
+    // connecting socket to remote server
+    printf("connecting socket to remote server\n");
+    if ((status = connect(remote_socket, (struct sockaddr*)&remote_server_addr, sizeof(remote_server_addr))) < 0)
+    {
+        printf("\nConnection Failed \n");
+        perror("Error message2: ");
+        return;
+    }
+
+    // sending message to remote server
+    printf("%s", request);
+    printf("sending message to remote server\n");
+    if((send(remote_socket, request, strlen(request), 0)) < 0)
+    {
+        perror("Error message3: ");
+        return;
+    };
+
+    printf("reading bytes");
+    bytes_read = recv(remote_socket, buffer, sizeof(buffer) - 1, 0);
+
+    if(bytes_read <= 0)
+    {
+        perror("Error message4:");
+        return;
+    }
+
+    printf("byteshavedbeenread\n");
+    buffer[bytes_read] = '\0';
+    // copy buffer to a new string
+    char *resp = malloc(sizeof(buffer) + 1);
+    memcpy(resp, buffer, sizeof(buffer));
+
+    close(remote_socket);
+    printf("sending\n");
+    printf("%s", resp);
+    if((send(client_socket, resp, sizeof(resp), 0)) < 0)
+    {
+        perror("Error message6: ");
+        return;
+    };
+    printf("has been sent");
 }
