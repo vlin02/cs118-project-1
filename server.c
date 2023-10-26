@@ -37,7 +37,7 @@ void parse_args(int argc, char *argv[], struct server_app *app);
 // The following functions need to be updated
 void handle_request(struct server_app *app, int client_socket);
 void serve_local_file(int client_socket, const char *path);
-void proxy_remote_file(struct server_app *app, int client_socket, const char *path);
+void proxy_remote_file(struct server_app *app, int client_socket, ssize_t *path);
 
 // The main function is provided and no change is needed
 int main(int argc, char *argv[])
@@ -84,6 +84,7 @@ int main(int argc, char *argv[])
 
     while (1)
     {
+        printf("newcycle");
         client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len);
         if (client_socket == -1)
         {
@@ -94,7 +95,9 @@ int main(int argc, char *argv[])
         printf("Accepted connection from %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
         printf("handle request");
         handle_request(&app, client_socket);
+        printf("handled");
         close(client_socket);
+        printf("closed");
     }
 
     close(server_socket);
@@ -138,11 +141,18 @@ void parse_args(int argc, char *argv[], struct server_app *app)
 int endsWith(const char *str, const char *sfx)
 {
     printf("comparing");
+    printf("%s", str);
+    printf("%s", sfx);
     size_t len = strlen(str);
+    printf("hmmm");
     size_t sfx_len = strlen(sfx);
+    printf("??");
 
     if (len < sfx_len)
         return 0;
+    printf("lol");
+    int result = (strcmp(str + len - sfx_len, sfx) == 0);
+    printf("%d", result);
     return strcmp(str + len - sfx_len, sfx) == 0;
 }
 
@@ -159,15 +169,22 @@ void handle_request(struct server_app *app, int client_socket)
 
     printf("in handle request");
     bytes_read = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
-    if (bytes_read <= 0)
+    printf("1");
+    if (bytes_read < 0)
     {
+        printf("????????");
+        perror("Error message: ");
         return; // Connection closed or error
     }
+    printf("2");
 
     buffer[bytes_read] = '\0';
+    printf("3");
     // copy buffer to a new string
-    char *request = malloc(strlen(buffer) + 1);
-    strcpy(request, buffer);
+    
+    char *request = malloc(sizeof(buffer) + 1);
+    printf("4");
+    memcpy(request, buffer, sizeof(buffer));
     
     printf("reading bytes");
 
@@ -213,14 +230,16 @@ void handle_request(struct server_app *app, int client_socket)
     // } else {
 
     printf("reached1");
+    printf("%s", file_name);
 
     if(endsWith(file_name, ".ts") == 1)
     {
         printf("reached");
-        proxy_remote_file(app, client_socket, request);
+        proxy_remote_file(app, client_socket, &bytes_read);
     }
     else
     {
+        printf("hi");
         serve_local_file(client_socket, file_name);
     }
     //}
@@ -246,6 +265,7 @@ void serve_local_file(int client_socket, const char *path)
 
         if (endsWith(path, ".html") || endsWith(path, ".txt"))
         {
+            printf("dis");
             content_type = "text/plain; charset=UTF-8";
         }
         else if (endsWith(path, ".jpg"))
@@ -257,12 +277,14 @@ void serve_local_file(int client_socket, const char *path)
             content_type = "application/octet-stream";
         }
 
+        printf("getup");
         fseek(file, 0, SEEK_END);
         long content_length = ftell(file);
         fseek(file, 0, SEEK_SET);
         char *buffer = (char *)malloc(content_length + 1);
         fread(buffer, 1, content_length, file);
 
+        printf("asap");
         char response[100];
         sprintf(
             response,
@@ -272,8 +294,18 @@ void serve_local_file(int client_socket, const char *path)
             "\r\n",
             content_type, content_length);
 
-        send(client_socket, response, strlen(response), 0);
-        send(client_socket, buffer, content_length, 0);
+        printf("hiiii");
+
+        if(send(client_socket, response, strlen(response), 0) < 0)
+        {
+            perror("error message: ");
+        };
+
+        printf("are u reaching");
+        if(send(client_socket, buffer, content_length, 0) < 0)
+        {
+            perror("error message: ");
+        };
     }
     else
     {
@@ -286,7 +318,7 @@ void serve_local_file(int client_socket, const char *path)
     }
 }
 
-void proxy_remote_file(struct server_app *app, int client_socket, const char *request)
+void proxy_remote_file(struct server_app *app, int client_socket, ssize_t *request)
 {
     // TODO: Implement proxy request and replace the following code
     // What's needed:
@@ -332,14 +364,14 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
     }
 
     // sending message to remote server
-    if((send(remote_socket, request, strlen(request), 0)) < 0)
+    if((send(remote_socket, request, sizeof(request), 0)) < 0)
     {
         perror("Error message: ");
         return;
     };
     printf("started to read bytes");
     bytes_read = recv(remote_socket, buffer, sizeof(buffer) - 1, 0);
-    printf("bytes read: %d", bytes_read);
+    printf("rah");
     if(bytes_read < 0)
     {
         perror("Error message:");
